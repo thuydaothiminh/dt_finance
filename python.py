@@ -1,224 +1,185 @@
 # python.py
+
 import streamlit as st
 import pandas as pd
 from google import genai
 from google.genai.errors import APIError
 
-# --- Streamlit Page Configuration ---
+# --- Cấu hình Trang Streamlit ---
 st.set_page_config(
-    page_title="Financial Report Analysis App",
+    page_title="App Phân Tích Báo Cáo Tài Chính",
     layout="wide"
 )
-st.title("Financial Report Analysis Application 📊")
 
-# --- Main Calculation Function (Uses Caching for Performance) ---
+st.title("Ứng dụng Phân Tích Báo Cáo Tài Chính 📊")
+
+# --- Hàm tính toán chính (Sử dụng Caching để Tối ưu hiệu suất) ---
 @st.cache_data
 def process_financial_data(df):
-    """Calculates Growth and Ratios."""
-    # Ensure values are numeric for calculations
-    numeric_cols = ['Previous Year', 'Next Year']
+    """Thực hiện các phép tính Tăng trưởng và Tỷ trọng."""
+    
+    # Đảm bảo các giá trị là số để tính toán
+    numeric_cols = ['Năm trước', 'Năm sau']
     for col in numeric_cols:
         df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
-
-    # 1. Calculate Growth Rate
-    # Use .replace(0, 1e-9) for Pandas Series to avoid division by zero errors
-    df['Growth Rate (%)'] = (
-        (df['Next Year'] - df['Previous Year']) / df['Previous Year'].replace(0, 1e-9)
+    
+    # 1. Tính Tốc độ Tăng trưởng
+    # Dùng .replace(0, 1e-9) cho Series Pandas để tránh lỗi chia cho 0
+    df['Tốc độ tăng trưởng (%)'] = (
+        (df['Năm sau'] - df['Năm trước']) / df['Năm trước'].replace(0, 1e-9)
     ) * 100
 
-    # 2. Calculate Weight by Total Assets
-    # Filter for the "TOTAL ASSETS" indicator
-    total_assets_row = df[df['Indicator'].str.contains('TOTAL ASSETS', case=False, na=False)]
-    if total_assets_row.empty:
-        raise ValueError("The 'TOTAL ASSETS' indicator was not found.")
+    # 2. Tính Tỷ trọng theo Tổng Tài sản
+    # Lọc chỉ tiêu "TỔNG CỘNG TÀI SẢN"
+    tong_tai_san_row = df[df['Chỉ tiêu'].str.contains('TỔNG CỘNG TÀI SẢN', case=False, na=False)]
     
-    total_assets_N_1 = total_assets_row['Previous Year'].iloc[0]
-    total_assets_N = total_assets_row['Next Year'].iloc[0]
+    if tong_tai_san_row.empty:
+        raise ValueError("Không tìm thấy chỉ tiêu 'TỔNG CỘNG TÀI SẢN'.")
 
-    # ******************************* BEGIN ERROR FIX *******************************
-    # Errors occur when using .replace() on single values (numpy.int64).
-    # Use ternary conditions to manually handle zero values for the denominator.
-    divisor_N_1 = total_assets_N_1 if total_assets_N_1 != 0 else 1e-9
-    divisor_N = total_assets_N if total_assets_N != 0 else 1e-9
+    tong_tai_san_N_1 = tong_tai_san_row['Năm trước'].iloc[0]
+    tong_tai_san_N = tong_tai_san_row['Năm sau'].iloc[0]
 
-    # Calculate the weight with the denominator processed
-    df['Weight Previous Year (%)'] = (df['Previous Year'] / divisor_N_1) * 100
-    df['Weight Next Year (%)'] = (df['Next Year'] / divisor_N) * 100
-    # ******************************* END ERROR FIX *******************************
+    # ******************************* PHẦN SỬA LỖI BẮT ĐẦU *******************************
+    # Lỗi xảy ra khi dùng .replace() trên giá trị đơn lẻ (numpy.int64).
+    # Sử dụng điều kiện ternary để xử lý giá trị 0 thủ công cho mẫu số.
+    
+    divisor_N_1 = tong_tai_san_N_1 if tong_tai_san_N_1 != 0 else 1e-9
+    divisor_N = tong_tai_san_N if tong_tai_san_N != 0 else 1e-9
 
+    # Tính tỷ trọng với mẫu số đã được xử lý
+    df['Tỷ trọng Năm trước (%)'] = (df['Năm trước'] / divisor_N_1) * 100
+    df['Tỷ trọng Năm sau (%)'] = (df['Năm sau'] / divisor_N) * 100
+    # ******************************* PHẦN SỬA LỖI KẾT THÚC *******************************
+    
     return df
 
-# --- Gemini API Call Function ---
+# --- Hàm gọi API Gemini ---
 def get_ai_analysis(data_for_ai, api_key):
-    """Sends analysis data to the Gemini API and receives comments."""
+    """Gửi dữ liệu phân tích đến Gemini API và nhận nhận xét."""
     try:
         client = genai.Client(api_key=api_key)
-        model_name = 'gemini-2.5-flash'
+        model_name = 'gemini-2.5-flash' 
+
         prompt = f"""
-        You are a professional financial analyst. Based on the following financial indicators, provide an objective and concise comment (about 3-4 paragraphs) on the company's financial situation. Focus on growth rate, changes in asset structure, and current solvency.
-        Raw data and indicators:
+        Bạn là một chuyên gia phân tích tài chính chuyên nghiệp. Dựa trên các chỉ số tài chính sau, hãy đưa ra một nhận xét khách quan, ngắn gọn (khoảng 3-4 đoạn) về tình hình tài chính của doanh nghiệp. Đánh giá tập trung vào tốc độ tăng trưởng, thay đổi cơ cấu tài sản và khả năng thanh toán hiện hành.
+        
+        Dữ liệu thô và chỉ số:
         {data_for_ai}
         """
+
         response = client.models.generate_content(
             model=model_name,
             contents=prompt
         )
         return response.text
+
     except APIError as e:
-        return f"Gemini API call error: Please check your API Key or usage limits. Error details: {e}"
+        return f"Lỗi gọi Gemini API: Vui lòng kiểm tra Khóa API hoặc giới hạn sử dụng. Chi tiết lỗi: {e}"
     except KeyError:
-        return "Error: The 'GEMINI_API_KEY' API key was not found. Please check the Secrets configuration on Streamlit Cloud."
+        return "Lỗi: Không tìm thấy Khóa API 'GEMINI_API_KEY'. Vui lòng kiểm tra cấu hình Secrets trên Streamlit Cloud."
     except Exception as e:
-        return f"An unidentified error occurred: {e}"
+        return f"Đã xảy ra lỗi không xác định: {e}"
 
-# --- Gemini API Call Function for Chat ---
-def get_chat_response(full_data, user_prompt, api_key):
-    """Sends all data and user questions to the Gemini API and receives answers."""
-    try:
-        client = genai.Client(api_key=api_key)
-        model_name = 'gemini-2.5-flash'
-        prompt = f"""
-        You are a professional financial analyst. Based on the following detailed financial data, answer the user's question.
-        Detailed data:
-        {full_data.to_markdown(index=False)}
 
-        User question: {user_prompt}
-        """
-        response = client.models.generate_content(
-            model=model_name,
-            contents=prompt
-        )
-        return response.text
-    except APIError as e:
-        return f"Gemini API call error: {e}"
-    except Exception as e:
-        return f"Unidentified error: {e}"
-
-# --- Function 1: Upload File ---
+# --- Chức năng 1: Tải File ---
 uploaded_file = st.file_uploader(
-    "1. Upload Excel File Financial Report (Indicator | Previous Year | Next Year)",
+    "1. Tải file Excel Báo cáo Tài chính (Chỉ tiêu | Năm trước | Năm sau)",
     type=['xlsx', 'xls']
 )
 
 if uploaded_file is not None:
     try:
         df_raw = pd.read_excel(uploaded_file)
-        # Preprocessing: Ensure only 3 important columns
-        df_raw.columns = ['Indicator', 'Previous Year', 'Next Year']
         
-        # Process data
+        # Tiền xử lý: Đảm bảo chỉ có 3 cột quan trọng
+        df_raw.columns = ['Chỉ tiêu', 'Năm trước', 'Năm sau']
+        
+        # Xử lý dữ liệu
         df_processed = process_financial_data(df_raw.copy())
-        
+
         if df_processed is not None:
-            # --- Function 2 & 3: Display Results ---
-            st.subheader("2. Growth Rate & 3. Asset Structure Weight")
+            
+            # --- Chức năng 2 & 3: Hiển thị Kết quả ---
+            st.subheader("2. Tốc độ Tăng trưởng & 3. Tỷ trọng Cơ cấu Tài sản")
             st.dataframe(df_processed.style.format({
-                'Previous Year': '{:,.0f}',
-                'Next Year': '{:,.0f}',
-                'Growth Rate (%)': '{:.2f}%',
-                'Weight Previous Year (%)': '{:.2f}%',
-                'Weight Next Year (%)': '{:.2f}%'
+                'Năm trước': '{:,.0f}',
+                'Năm sau': '{:,.0f}',
+                'Tốc độ tăng trưởng (%)': '{:.2f}%',
+                'Tỷ trọng Năm trước (%)': '{:.2f}%',
+                'Tỷ trọng Năm sau (%)': '{:.2f}%'
             }), use_container_width=True)
-
-            # --- Function 4: Calculate Financial Indicators ---
-            st.subheader("4. Basic Financial Indicators")
+            
+            # --- Chức năng 4: Tính Chỉ số Tài chính ---
+            st.subheader("4. Các Chỉ số Tài chính Cơ bản")
+            
             try:
-                # Filter values for Current Liquidity Ratio (Example)
-                short_term_assets_n = df_processed[df_processed['Indicator'].str.contains('SHORT-TERM ASSETS', case=False, na=False)]['Next Year'].iloc[0]
-                short_term_assets_n_1 = df_processed[df_processed['Indicator'].str.contains('SHORT-TERM ASSETS', case=False, na=False)]['Previous Year'].iloc[0]
+                # Lọc giá trị cho Chỉ số Thanh toán Hiện hành (Ví dụ)
                 
-                short_term_debt_N = df_processed[df_processed['Indicator'].str.contains('SHORT-TERM DEBT', case=False, na=False)]['Next Year'].iloc[0]
-                short_term_debt_N_1 = df_processed[df_processed['Indicator'].str.contains('SHORT-TERM DEBT', case=False, na=False)]['Previous Year'].iloc[0]
+                # Lấy Tài sản ngắn hạn
+                tsnh_n = df_processed[df_processed['Chỉ tiêu'].str.contains('TÀI SẢN NGẮN HẠN', case=False, na=False)]['Năm sau'].iloc[0]
+                tsnh_n_1 = df_processed[df_processed['Chỉ tiêu'].str.contains('TÀI SẢN NGẮN HẠN', case=False, na=False)]['Năm trước'].iloc[0]
 
-                # Calculation
-                current_liquidity_N = short_term_assets_n / short_term_debt_N
-                current_liquidity_N_1 = short_term_assets_n_1 / short_term_debt_N_1
+                # Lấy Nợ ngắn hạn (Dùng giá trị giả định hoặc lọc từ file nếu có)
+                # **LƯU Ý: Thay thế logic sau nếu bạn có Nợ Ngắn Hạn trong file**
+                no_ngan_han_N = df_processed[df_processed['Chỉ tiêu'].str.contains('NỢ NGẮN HẠN', case=False, na=False)]['Năm sau'].iloc[0]  
+                no_ngan_han_N_1 = df_processed[df_processed['Chỉ tiêu'].str.contains('NỢ NGẮN HẠN', case=False, na=False)]['Năm trước'].iloc[0]
+
+                # Tính toán
+                thanh_toan_hien_hanh_N = tsnh_n / no_ngan_han_N
+                thanh_toan_hien_hanh_N_1 = tsnh_n_1 / no_ngan_han_N_1
                 
                 col1, col2 = st.columns(2)
                 with col1:
                     st.metric(
-                        label="Current Liquidity Ratio (Previous Year)",
-                        value=f"{current_liquidity_N_1:.2f} times"
+                        label="Chỉ số Thanh toán Hiện hành (Năm trước)",
+                        value=f"{thanh_toan_hien_hanh_N_1:.2f} lần"
                     )
                 with col2:
                     st.metric(
-                        label="Current Liquidity Ratio (Next Year)",
-                        value=f"{current_liquidity_N:.2f} times",
-                        delta=f"{current_liquidity_N - current_liquidity_N_1:.2f}"
+                        label="Chỉ số Thanh toán Hiện hành (Năm sau)",
+                        value=f"{thanh_toan_hien_hanh_N:.2f} lần",
+                        delta=f"{thanh_toan_hien_hanh_N - thanh_toan_hien_hanh_N_1:.2f}"
                     )
+                    
             except IndexError:
-                st.warning("The 'SHORT-TERM ASSETS' or 'SHORT-TERM DEBT' indicators are missing to calculate the index.")
-                current_liquidity_N = "N/A"
-                current_liquidity_N_1 = "N/A"
-            except ZeroDivisionError:
-                st.warning("Cannot calculate current liquidity ratio because Short-Term Debt is 0.")
-                current_liquidity_N = "N/A"
-                current_liquidity_N_1 = "N/A"
-
-            # --- Function 5: AI Comments (initial) ---
-            st.subheader("5. Financial Situation Comments (AI)")
-            data_for_ai = pd.DataFrame({
-                'Indicator': [
-                    'Entire Analysis Table (raw data)',
-                    'Short-term asset growth (%)',
-                    'Current liquidity (N-1)',
-                    'Current liquidity (N)'
-                ],
-                'Value': [
-                    df_processed.to_markdown(index=False),
-                    f"{df_processed[df_processed['Indicator'].str.contains('SHORT-TERM ASSETS', case=False, na=False)]['Growth Rate (%)'].iloc[0]:.2f}%" if 'SHORT-TERM ASSETS' in df_processed['Indicator'].to_list() else "N/A",
-                    f"{current_liquidity_N_1}",
-                    f"{current_liquidity_N}"
-                ]
-            }).to_markdown(index=False)
+                 st.warning("Thiếu chỉ tiêu 'TÀI SẢN NGẮN HẠN' hoặc 'NỢ NGẮN HẠN' để tính chỉ số.")
+                 thanh_toan_hien_hanh_N = "N/A" # Dùng để tránh lỗi ở Chức năng 5
+                 thanh_toan_hien_hanh_N_1 = "N/A"
             
-            if st.button("Request AI Analysis"):
-                api_key = st.secrets.get("GEMINI_API_KEY")
-                if api_key:
-                    with st.spinner('Sending data and waiting for Gemini to analyze...'):
-                        ai_result = get_ai_analysis(data_for_ai, api_key)
-                    st.markdown("**Analysis Results from Gemini AI:**")
-                    st.info(ai_result)
-                else:
-                    st.error("Error: API Key not found. Please configure the 'GEMINI_API_KEY' key in Streamlit Secrets.")
+            # --- Chức năng 5: Nhận xét AI ---
+            st.subheader("5. Nhận xét Tình hình Tài chính (AI)")
+            
+            # Chuẩn bị dữ liệu để gửi cho AI
+            data_for_ai = pd.DataFrame({
+                'Chỉ tiêu': [
+                    'Toàn bộ Bảng phân tích (dữ liệu thô)', 
+                    'Tăng trưởng Tài sản ngắn hạn (%)', 
+                    'Thanh toán hiện hành (N-1)', 
+                    'Thanh toán hiện hành (N)'
+                ],
+                'Giá trị': [
+                    df_processed.to_markdown(index=False),
+                    f"{df_processed[df_processed['Chỉ tiêu'].str.contains('TÀI SẢN NGẮN HẠN', case=False, na=False)]['Tốc độ tăng trưởng (%)'].iloc[0]:.2f}%", 
+                    f"{thanh_toan_hien_hanh_N_1}", 
+                    f"{thanh_toan_hien_hanh_N}"
+                ]
+            }).to_markdown(index=False) 
 
-            # --- Function 6: AI Chat Frame ---
-            st.subheader("6. AI Chat about Financial Reports")
-
-            # Initialize chat history
-            if "messages" not in st.session_state:
-                st.session_state.messages = []
-
-            # Display previous messages
-            for message in st.session_state.messages:
-                with st.chat_message(message["role"]):
-                    st.markdown(message["content"])
-
-            # Process user input
-            if prompt := st.chat_input("Ask about the financial report..."):
-                # Add the user's message to the history
-                st.session_state.messages.append({"role": "user", "content": prompt})
-                with st.chat_message("user"):
-                    st.markdown(prompt)
-
-                # Prepare data for AI
-                full_data_string = df_processed.to_markdown(index=False)
+            if st.button("Yêu cầu AI Phân tích"):
+                api_key = st.secrets.get("GEMINI_API_KEY") 
                 
-                # Call Gemini API and receive a response
-                api_key = st.secrets.get("GEMINI_API_KEY")
                 if api_key:
-                    with st.chat_message("assistant"):
-                        with st.spinner("Sending question and waiting for Gemini to respond..."):
-                            response = get_chat_response(df_processed, prompt, api_key)
-                            st.markdown(response)
-                            # Add AI's response to the history
-                            st.session_state.messages.append({"role": "assistant", "content": response})
+                    with st.spinner('Đang gửi dữ liệu và chờ Gemini phân tích...'):
+                        ai_result = get_ai_analysis(data_for_ai, api_key)
+                        st.markdown("**Kết quả Phân tích từ Gemini AI:**")
+                        st.info(ai_result)
                 else:
-                    st.error("Error: API Key not found. Please configure the 'GEMINI_API_KEY' key in Streamlit Secrets.")
+                     st.error("Lỗi: Không tìm thấy Khóa API. Vui lòng cấu hình Khóa 'GEMINI_API_KEY' trong Streamlit Secrets.")
 
     except ValueError as ve:
-        st.error(f"Data structure error: {ve}")
+        st.error(f"Lỗi cấu trúc dữ liệu: {ve}")
     except Exception as e:
-        st.error(f"An error occurred while reading or processing the file: {e}. Please check the file format.")
+        st.error(f"Có lỗi xảy ra khi đọc hoặc xử lý file: {e}. Vui lòng kiểm tra định dạng file.")
+
 else:
-    st.info("Please upload the Excel file to begin the analysis.")
+    st.info("Vui lòng tải lên file Excel để bắt đầu phân tích.")
