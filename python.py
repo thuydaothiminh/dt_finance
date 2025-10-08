@@ -2,8 +2,6 @@
 
 import streamlit as st
 import pandas as pd
-import matplotlib.pyplot as plt
-
 from google import genai
 from google.genai.errors import APIError
 
@@ -185,9 +183,8 @@ if uploaded_file is not None:
 
 else:
     st.info("Vui lòng tải lên file Excel để bắt đầu phân tích.")
-
-
 # --- Chức năng 6: Hỏi đáp trực tiếp & Phân tích Biểu đồ bằng Gemini 💬 ---
+import matplotlib.pyplot as plt
 
 st.subheader("6. Hỏi đáp & Phân tích Biểu đồ với Gemini 💬")
 
@@ -293,4 +290,3 @@ else:
 if st.button("🧹 Xóa lịch sử hội thoại"):
     st.session_state.chat_history = []
     st.rerun()
-
