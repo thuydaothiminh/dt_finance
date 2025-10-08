@@ -2,6 +2,8 @@
 
 import streamlit as st
 import pandas as pd
+import matplotlib.pyplot as plt
+
 from google import genai
 from google.genai.errors import APIError
 
@@ -186,7 +188,6 @@ else:
 
 
 # --- Chức năng 6: Hỏi đáp trực tiếp & Phân tích Biểu đồ bằng Gemini 💬 ---
-import matplotlib.pyplot as plt
 
 st.subheader("6. Hỏi đáp & Phân tích Biểu đồ với Gemini 💬")
 
