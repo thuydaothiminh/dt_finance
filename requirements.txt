@@ -1,3 +1,8 @@
+streamlit==1.39.0
+pandas==2.2.2
+numpy==1.26.4
+matplotlib==3.9.0
+
 # requirements.txt
 
 # Thư viện chính cho Streamlit
@@ -14,3 +19,4 @@ openpyxl
 
 # THÊM THƯ VIỆN NÀY ĐỂ GIẢI QUYẾT LỖI to_markdown()
 tabulate
+
